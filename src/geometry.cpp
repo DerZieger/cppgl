@@ -1,129 +1,1310 @@
-#include <geometry.h>
-#include <glm/gtc/matrix_transform.hpp>
+#include "geometry.h"
+#include "mesh.h"
 #include <iostream>
+#include "cassert.h"
+
 
 CPPGL_NAMESPACE_BEGIN
 
-GeometryImpl::GeometryImpl(const std::string& name) : name(name), bb_min(FLT_MAX), bb_max(FLT_MIN) {}
+    std::vector<vec3> face2vertex_normals(const std::vector<vec3> &face_normals,
+                                          const uint32_t position_size,
+                                          const std::vector<uint32_t> &indices) {
+        _CPPGL_ASSERT_GE(indices.size(), position_size);
+        _CPPGL_ASSERT_EQ(face_normals.size(), indices.size() / 3);
 
-GeometryImpl::GeometryImpl(const std::string& name, const aiMesh* mesh_ai) : GeometryImpl(name) {
-    add(mesh_ai);
-}
+        std::vector<std::vector<uint32_t>> vertex_appearance(position_size);
+        std::vector<vec3> vertex_normals;
 
-GeometryImpl::GeometryImpl(const std::string& name, const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices,
-            const std::vector<glm::vec3>& normals, const std::vector<glm::vec2>& texcoords) : GeometryImpl(name) {
-    add(positions, indices, normals, texcoords);
-}
+        // std::cout << "Face normals" << std::endl;
+        // for (unsigned int i = 0; i < face_normals.size(); i++) {
+        //   std::cout << "[" << i << "," << i + 3 << "]: " << face_normals[i]
+        //             << std::endl;
+        // }
 
-GeometryImpl::~GeometryImpl() {}
+        // this assumes that the same vertex is referenced within multiple faces
+        // it does not work in cases in which the same vertex is in the vertex buffer
+        // multiple times
+        for (unsigned int i = 0; i < indices.size(); i++) {
+            vertex_appearance[indices[i]].push_back(i / 3);
 
-void GeometryImpl::add(const aiMesh* mesh_ai) {
-    // conversion helper
-    const auto to_glm = [](const aiVector3D& v) { return glm::vec3(v.x, v.y, v.z); };
-    // extract vertices, normals and texture coords
-    positions.reserve(positions.size() + mesh_ai->mNumVertices);
-    normals.reserve(normals.size() + mesh_ai->HasNormals() ? mesh_ai->mNumVertices : 0);
-    texcoords.reserve(texcoords.size() + mesh_ai->HasTextureCoords(0) ? mesh_ai->mNumVertices : 0);
-    for (uint32_t i = 0; i < mesh_ai->mNumVertices; ++i) {
-        positions.emplace_back(to_glm(mesh_ai->mVertices[i]));
-        if (mesh_ai->HasNormals())
-            normals.emplace_back(to_glm(mesh_ai->mNormals[i]));
-        if (mesh_ai->HasTextureCoords(0))
-            texcoords.emplace_back(glm::vec2(to_glm(mesh_ai->mTextureCoords[0][i])));
-        // update AABB
-        bb_min = glm::min(bb_min, to_glm(mesh_ai->mVertices[i]));
-        bb_max = glm::max(bb_max, to_glm(mesh_ai->mVertices[i]));
+            // std::cout << "vertex_appearance " << indices[i] << ": " << i / 3
+            //           << " normal: " << face_normals[i / 3] << std::endl;
+        }
+        for (unsigned int i = 0; i < vertex_appearance.size(); i++) {
+            vec3 n(0, 0, 0);
+            unsigned int c = 0;
+            for (unsigned int j = 0; j < vertex_appearance[i].size(); j++) {
+                n += face_normals[vertex_appearance[i][j]];
+                c++;
+            }
+            vertex_normals.push_back((n / c).normalized());
+        }
+        return vertex_normals;
     }
-    // extract faces
-    indices.reserve(indices.size() + mesh_ai->mNumFaces*3);
-    for (uint32_t i = 0; i < mesh_ai->mNumFaces; ++i) {
-        const aiFace &face = mesh_ai->mFaces[i];
-        if (face.mNumIndices == 3) {
-            indices.emplace_back(face.mIndices[0]);
-            indices.emplace_back(face.mIndices[1]);
-            indices.emplace_back(face.mIndices[2]);
-        } else
-            std::cerr << "WARN: Geometry: skipping non-triangle face!" << std::endl;
+
+    std::vector<vec3> face2vertex_normals(const float *face_normals,
+                                          const uint32_t normal_size,
+                                          const uint32_t position_size,
+                                          const uint32_t *indices,
+                                          const uint32_t indices_size) {
+        _CPPGL_ASSERT_GE(indices_size, position_size);
+        _CPPGL_ASSERT_EQ(normal_size, indices_size / 3);
+
+        std::vector<std::vector<uint32_t>> vertex_appearance(position_size);
+        std::vector<vec3> vertex_normals;
+
+        for (unsigned int i = 0; i < indices_size; i++) {
+            vertex_appearance[indices[i]].push_back(i / 3);
+        }
+
+        for (unsigned int i = 0; i < vertex_appearance.size(); i++) {
+            vec3 n(0, 0, 0);
+            unsigned int c = 0;
+            for (unsigned int j = 0; j < vertex_appearance[i].size(); j++) {
+                n += vec3(face_normals[vertex_appearance[i][j] * 3 + 0],
+                          face_normals[vertex_appearance[i][j] * 3 + 1],
+                          face_normals[vertex_appearance[i][j] * 3 + 2]);
+                c++;
+            }
+            vertex_normals.push_back((n / c).normalized());
+        }
+        return vertex_normals;
     }
-}
 
-void GeometryImpl::add(const GeometryImpl& other) {
-    add(other.positions, other.indices, other.normals, other.texcoords);
-}
+    std::vector<vec3> face2vertex_normals(const std::vector<vec3> &face_normals,
+                                          const uint32_t position_size,
+                                          const uint32_t *indices,
+                                          const uint32_t indices_size) {
+        _CPPGL_ASSERT_GE(indices_size, position_size);
+        _CPPGL_ASSERT_EQ(face_normals.size(), indices_size / 3);
 
-void GeometryImpl::add(const std::vector<glm::vec3>& positions, const std::vector<uint32_t>& indices,
-        const std::vector<glm::vec3>& normals, const std::vector<glm::vec2>& texcoords) {
-    // add vertices, normals and texture coords
-    this->positions.reserve(this->positions.size() + positions.size());
-    this->normals.reserve(this->normals.size() + normals.size());
-    this->texcoords.reserve(this->texcoords.size() + texcoords.size());
-    for (uint32_t i = 0; i < positions.size(); ++i) {
-        this->positions.emplace_back(positions[i]);
-        if (i < normals.size())
-            this->normals.emplace_back(normals[i]);
-        if (i < texcoords.size())
-            this->texcoords.emplace_back(texcoords[i]);
-        // update AABB
-        bb_min = glm::min(bb_min, positions[i]);
-        bb_max = glm::max(bb_max, positions[i]);
+        std::vector<std::vector<uint32_t>> vertex_appearance(position_size);
+        std::vector<vec3> vertex_normals;
+
+        for (unsigned int i = 0; i < indices_size; i++) {
+            vertex_appearance[indices[i]].push_back(i / 3);
+        }
+        for (unsigned int i = 0; i < vertex_appearance.size(); i++) {
+            vec3 n(0, 0, 0);
+            unsigned int c = 0;
+            for (unsigned int j = 0; j < vertex_appearance[i].size(); j++) {
+                n += face_normals[vertex_appearance[i][j]];
+                c++;
+            }
+            vertex_normals.push_back((n / c).normalized());
+        }
+        return vertex_normals;
     }
-    // add indices
-    this->indices.reserve(this->indices.size() + indices.size());
-    for (uint32_t i = 0; i < indices.size(); ++i)
-        this->indices.emplace_back(indices[i]);
-}
 
-void GeometryImpl::clear() {
-    bb_min = bb_max = glm::vec3(0);
-    positions.clear();
-    indices.clear();
-    normals.clear();
-    texcoords.clear();
-}
+    std::vector<vec3> generate_face_normals(const std::vector<vec3> &positions,
+                                            const std::vector<uint32_t> &indices) {
+        std::vector<vec3> face_normals;
 
-void GeometryImpl::recompute_aabb() {
-    bb_min = glm::vec3(FLT_MAX);
-    bb_max = glm::vec3(FLT_MIN);;
-    for (const auto& pos : positions) {
-        bb_min = glm::min(bb_min, pos);
-        bb_max = glm::max(bb_max, pos);
+        for (unsigned int i = 0; i < indices.size(); i = i + 3) {
+            vec3 e1 = positions[indices[i + 1]] - positions[indices[i + 0]];
+            vec3 e2 = positions[indices[i + 2]] - positions[indices[i + 1]];
+            vec3 n = (e1.cross(e2)).normalized();
+            face_normals.push_back(n);
+        }
+
+        return face_normals;
     }
-}
 
-void GeometryImpl::fit_into_aabb(const glm::vec3& aabb_min, const glm::vec3& aabb_max) {
-    // compute offset to origin and scale factor
-    const glm::vec3 center = (bb_min + bb_max) * .5f;
-    const glm::vec3 scale_v = (aabb_max - aabb_min) / (bb_max - bb_min);
-    const float scale_f = std::min(scale_v.x, std::min(scale_v.y, scale_v.z));
-    // apply
-    for (uint32_t i = 0; i < positions.size(); ++i)
-        positions[i] = (positions[i] - center) * scale_f;
-}
+    std::vector<vec3> generate_face_normals(const float *positions,
+                                            const uint32_t *indices,
+                                            const uint32_t indices_size) {
+        std::vector<vec3> face_normals;
 
-void GeometryImpl::translate(const glm::vec3& by) {
-    for (uint32_t i = 0; i < positions.size(); ++i)
-        positions[i] += by;
-}
+        for (unsigned int i = 0; i < indices_size; i = i + 3) {
+            vec3 p0(positions[indices[i + 0] * 3 + 0],
+                    positions[indices[i + 0] * 3 + 1],
+                    positions[indices[i + 0] * 3 + 2]);
 
-void GeometryImpl::scale(const glm::vec3& by) {
-    // scale positions
-    for (uint32_t i = 0; i < positions.size(); ++i)
-        positions[i] *= by;
-    // scale normals
-    const glm::mat4 mat_norm = glm::transpose(glm::inverse(glm::scale(glm::mat4(1), by)));
-    for (uint32_t i = 0; i < normals.size(); ++i)
-        normals[i] = glm::normalize(glm::vec3(mat_norm * glm::vec4(normals[i], 0)));
-}
+            vec3 p1(positions[indices[i + 1] * 3 + 0],
+                    positions[indices[i + 1] * 3 + 1],
+                    positions[indices[i + 1] * 3 + 2]);
 
-void GeometryImpl::rotate(float angle_degrees, const glm::vec3& axis) {
-    // rotate positions
-    const glm::mat4 rot = glm::rotate(glm::mat4(1), glm::radians(angle_degrees), axis);
-    for (uint32_t i = 0; i < positions.size(); ++i)
-        positions[i] = glm::vec3(rot * glm::vec4(positions[i], 1));
-    // rotate normals
-    const glm::mat4 rot_inv_tra = glm::transpose(glm::inverse(rot));
-    for (uint32_t i = 0; i < normals.size(); ++i)
-        normals[i] = glm::normalize(glm::vec3(rot_inv_tra * glm::vec4(normals[i], 0)));
-}
+            vec3 p2(positions[indices[i + 2] * 3 + 0],
+                    positions[indices[i + 2] * 3 + 1],
+                    positions[indices[i + 2] * 3 + 2]);
 
+            vec3 e1 = p1 - p0;
+            vec3 e2 = p2 - p1;
+            vec3 n = (e1.cross(e2)).normalized();
+            face_normals.push_back(n);
+        }
+
+        return face_normals;
+    }
+
+    std::vector<vec3> generate_vertex_normals(
+            const std::vector<vec3> &positions, const std::vector<uint32_t> &indices) {
+        std::vector<vec3> face_normals = generate_face_normals(positions, indices);
+        return face2vertex_normals(face_normals, positions.size(), indices);
+    }
+
+    std::vector<vec3> generate_vertex_normals(const float *positions,
+                                              const uint32_t position_size,
+                                              const uint32_t *indices,
+                                              const uint32_t indices_size) {
+        std::vector<vec3> face_normals =
+                generate_face_normals(positions, indices, indices_size);
+        return face2vertex_normals(face_normals, position_size, indices,
+                                   indices_size);
+    }
+
+// -------------------------------------------------------------------
+// GeometryBaseImpl
+// -------------------------------------------------------------------
+
+    GeometryBaseImpl::GeometryBaseImpl(const std::string &name)
+            : name(name),
+              bb_min(std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max()),
+              bb_max(std::numeric_limits<float>::min(),
+                     std::numeric_limits<float>::min(),
+                     std::numeric_limits<float>::min()),
+              auto_normals_(false) {}
+
+    GeometryBaseImpl::~GeometryBaseImpl() {}
+
+    float *GeometryBaseImpl::positions_ptr() {
+        assert(false);
+        return nullptr;
+    };
+
+    float *GeometryBaseImpl::normals_ptr() {
+        assert(false);
+        return nullptr;
+    };
+
+    float *GeometryBaseImpl::texcoords_ptr() {
+        assert(false);
+        return nullptr;
+    };
+
+    uint32_t *GeometryBaseImpl::indices_ptr() {
+        assert(false);
+        return nullptr;
+    };
+
+    size_t GeometryBaseImpl::positions_size() const {
+        assert(false);
+        return 0;
+    };
+
+    size_t GeometryBaseImpl::normals_size() const {
+        assert(false);
+        return 0;
+    };
+
+    size_t GeometryBaseImpl::texcoords_size() const {
+        assert(false);
+        return 0;
+    };
+
+    size_t GeometryBaseImpl::indices_size() const {
+        assert(false);
+        return 0;
+    };
+
+    vec3 GeometryBaseImpl::get_position(unsigned int index) const {
+        assert(false);
+        return vec3(0, 0, 0);
+    };
+
+    vec3 GeometryBaseImpl::get_normal(unsigned int index) const {
+        assert(false);
+        return vec3(0, 0, 0);
+    };
+
+    vec2 GeometryBaseImpl::get_texcoord(unsigned int index) const {
+        assert(false);
+        return vec2(0, 0);
+    };
+
+    uint32_t GeometryBaseImpl::get_index(unsigned int index) const {
+        assert(false);
+        return 0;
+    };
+
+    void GeometryBaseImpl::set(const std::vector<float> &positions, const std::vector<uint32_t> &indices,
+                               const std::vector<float> &normals, const std::vector<float> &texcoords) {
+        assert(false);
+    }
+
+    void GeometryBaseImpl::set_position(unsigned int index,
+                                        const vec3 &position) {
+        assert(false);
+    }
+
+    void GeometryBaseImpl::set_normal(unsigned int index,
+                                      const vec3 &normal) {
+        assert(false);
+    }
+
+    void GeometryBaseImpl::set_texcoord(unsigned int index,
+                                        const vec2 &texcoord) {
+        assert(false);
+    }
+
+    void GeometryBaseImpl::set_index(unsigned int index,
+                                     uint32_t index_value) {
+        assert(false);
+    }
+
+    bool GeometryBaseImpl::has_normals() const {
+        assert(false);
+        return false;
+    };
+
+    bool GeometryBaseImpl::has_texcoords() const {
+        assert(false);
+        return false;
+    };
+
+    void GeometryBaseImpl::auto_generate_normals(
+            const mat4 &initial_transform) {
+        assert(false);
+    }
+
+    void GeometryBaseImpl::convert_normals_perface2vertex() {
+        assert(false);
+    }
+
+    void GeometryBaseImpl::register_mesh(
+            const NamedHandle<MeshImpl> &mesh) {
+        used_by.emplace(mesh->name, mesh);
+    }
+
+    void GeometryBaseImpl::unregister_mesh(
+            const std::string &name) {
+        if (used_by.find(name) != used_by.end())
+            used_by.erase(name);
+    }
+
+    void GeometryBaseImpl::clear_mesh_gpu_memory() {
+        for (auto iter = used_by.begin(); iter != used_by.end(); iter++) {
+            iter->second->clear_gpu();
+        }
+    }
+
+    void GeometryBaseImpl::update_meshes() {
+        for (auto iter = used_by.begin(); iter != used_by.end(); iter++) {
+            iter->second->upload_gpu();
+        }
+    }
+
+    void GeometryBaseImpl::clear() { _CPPGL_ASSERT(false); }
+
+// O(n) geometry operations
+    void GeometryBaseImpl::recompute_aabb() {
+        _CPPGL_ASSERT(false);
+    }
+
+    void GeometryBaseImpl::fit_into_aabb(const vec3 &aabb_min,
+                                         const vec3 &aabb_max) {
+        _CPPGL_ASSERT(false);
+    }
+
+    void GeometryBaseImpl::translate(const vec3 &by) {
+        _CPPGL_ASSERT(false);
+    }
+
+    void GeometryBaseImpl::scale(const vec3 &by) {
+        _CPPGL_ASSERT(false);
+    }
+
+    void GeometryBaseImpl::rotate(float angle_degrees,
+                                  const vec3 &axis) {
+        _CPPGL_ASSERT(false);
+    }
+
+    void GeometryBaseImpl::transform(const mat4 &trans) {
+        _CPPGL_ASSERT(false);
+    }
+
+    void GeometryBaseImpl::add_attribute_vec3(
+            const std::string &name, vec3 *attribute, uint32_t size, bool external,
+            bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(vec3_map.count(name), 0);
+
+        AttributePtr <vec3> ptr;
+        ptr.external = external;
+        ptr.size = size;
+        ptr.dim = 1;
+        if (!external) {
+            std::vector<vec3> v;
+            for (unsigned int i = 0; i < size; i++) {
+                v.push_back(attribute[i]);
+            }
+            vec3_storage.push_back(v);
+            ptr.ptr = vec3_storage[vec3_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute;
+        }
+        vec3_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_vec3(
+            const std::string &name, std::vector<vec3> &attribute, bool external,
+            bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(vec3_map.count(name), 0);
+
+        AttributePtr <vec3> ptr;
+        ptr.external = external;
+        ptr.size = attribute.size();
+        ptr.dim = 1;
+        if (!external) {
+            std::vector<vec3> v(attribute);
+            vec3_storage.push_back(v);
+            ptr.ptr = vec3_storage[vec3_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute.data();
+        }
+        vec3_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_vec4(
+            const std::string &name, vec4 *attribute, uint32_t size, bool external,
+            bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(vec4_map.count(name), 0);
+
+        AttributePtr <vec4> ptr;
+        ptr.external = external;
+        ptr.size = size;
+        ptr.dim = 1;
+        if (!external) {
+            std::vector<vec4> v;
+            for (unsigned int i = 0; i < size; i++) {
+                v.push_back(attribute[i]);
+            }
+            vec4_storage.push_back(v);
+            ptr.ptr = vec4_storage[vec4_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute;
+        }
+        vec4_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_vec4(
+            const std::string &name, std::vector<vec4> &attribute, bool external,
+            bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(vec4_map.count(name), 0);
+
+        AttributePtr <vec4> ptr;
+        ptr.external = external;
+        ptr.size = attribute.size();
+        ptr.dim = 1;
+        if (!external) {
+            std::vector<vec4> v(attribute);
+            vec4_storage.push_back(v);
+            ptr.ptr = vec4_storage[vec4_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute.data();
+        }
+        vec4_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_vec2(
+            const std::string &name, vec2 *attribute, uint32_t size, bool external,
+            bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(vec2_map.count(name), 0);
+
+        AttributePtr <vec2> ptr;
+        ptr.external = external;
+        ptr.size = size;
+        ptr.dim = 1;
+        if (!external) {
+            std::vector<vec2> v;
+            for (unsigned int i = 0; i < size; i++) {
+                v.push_back(attribute[i]);
+            }
+            vec2_storage.push_back(v);
+            ptr.ptr = vec2_storage[vec2_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute;
+        }
+        vec2_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_vec2(
+            const std::string &name, std::vector<vec2> &attribute, bool external,
+            bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(vec2_map.count(name), 0);
+
+        AttributePtr <vec2> ptr;
+        ptr.external = external;
+        ptr.size = attribute.size();
+        ptr.dim = 1;
+        if (!external) {
+            std::vector<vec2> v(attribute);
+            vec2_storage.push_back(v);
+            ptr.ptr = vec2_storage[vec2_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute.data();
+        }
+        vec2_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_float(
+            const std::string &name, float *attribute, uint32_t size, uint32_t dim,
+            bool external, bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(float_map.count(name), 0);
+
+        AttributePtr<float> ptr;
+        ptr.external = external;
+        ptr.size = size;
+        ptr.dim = dim;
+        if (!external) {
+            std::vector<float> v;
+            for (unsigned int i = 0; i < size * dim; i++) {
+                v.push_back(attribute[i]);
+            }
+            _CPPGL_ASSERT_EQ(v.size(), ptr.size * ptr.dim);
+            float_storage.push_back(v);
+            ptr.ptr = float_storage[float_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute;
+        }
+        float_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_float(
+            const std::string &name, std::vector<float> &attribute, uint32_t dim,
+            bool external, bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(float_map.count(name), 0);
+
+        AttributePtr<float> ptr;
+        ptr.external = external;
+        ptr.size = attribute.size() / dim;
+        ptr.dim = dim;
+        if (!external) {
+            std::vector<float> v(attribute);
+            _CPPGL_ASSERT_EQ(v.size(), ptr.size * ptr.dim);
+            float_storage.push_back(v);
+            ptr.ptr = float_storage[float_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute.data();
+        }
+        float_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_uint(
+            const std::string &name, uint32_t *attribute, uint32_t size, uint32_t dim,
+            bool external, bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(uint_map.count(name), 0);
+
+        AttributePtr <uint32_t> ptr;
+        ptr.external = external;
+        ptr.size = size;
+        ptr.dim = dim;
+        if (!external) {
+            std::vector<uint32_t> v;
+            for (unsigned int i = 0; i < size * dim; i++) {
+                v.push_back(attribute[i]);
+            }
+            _CPPGL_ASSERT_EQ(v.size(), ptr.size * ptr.dim);
+            uint_storage.push_back(v);
+            ptr.ptr = uint_storage[uint_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute;
+        }
+        uint_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_uint(
+            const std::string &name, std::vector<uint32_t> &attribute, uint32_t dim,
+            bool external, bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(uint_map.count(name), 0);
+
+        AttributePtr <uint32_t> ptr;
+        ptr.external = external;
+        ptr.size = attribute.size() / dim;
+        ptr.dim = dim;
+        if (!external) {
+            std::vector<uint32_t> v(attribute);
+            uint_storage.push_back(v);
+            _CPPGL_ASSERT_EQ(v.size(), ptr.size * ptr.dim);
+            ptr.ptr = uint_storage[uint_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute.data();
+        }
+        uint_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_int(
+            const std::string &name, int32_t *attribute, uint32_t size, uint32_t dim,
+            bool external, bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(int_map.count(name), 0);
+
+        AttributePtr <int32_t> ptr;
+        ptr.external = external;
+        ptr.size = size;
+        ptr.dim = dim;
+        if (!external) {
+            std::vector<int32_t> v;
+            for (unsigned int i = 0; i < size * dim; i++) {
+                v.push_back(attribute[i]);
+            }
+            _CPPGL_ASSERT_EQ(v.size(), ptr.size * ptr.dim);
+            int_storage.push_back(v);
+            ptr.ptr = int_storage[int_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute;
+        }
+        int_map[name] = ptr;
+    }
+
+    void GeometryBaseImpl::add_attribute_int(
+            const std::string &name, std::vector<int32_t> &attribute, uint32_t dim,
+            bool external, bool overwrite) {
+        if (!overwrite)
+                _CPPGL_ASSERT_EQ(int_map.count(name), 0);
+
+        AttributePtr <int32_t> ptr;
+        ptr.external = external;
+        ptr.size = attribute.size() / dim;
+        ptr.dim = dim;
+        if (!external) {
+            std::vector<int32_t> v(attribute);
+            int_storage.push_back(v);
+            _CPPGL_ASSERT_EQ(v.size(), ptr.size * ptr.dim);
+            ptr.ptr = int_storage[int_storage.size() - 1].data();
+        } else {
+            ptr.ptr = attribute.data();
+        }
+        int_map[name] = ptr;
+    }
+
+// -------------------------------------------------------------------
+// GeometryImpl
+// -------------------------------------------------------------------
+
+    GeometryImpl::GeometryImpl(const std::string &name)
+            : GeometryBaseImpl(name) {}
+
+    GeometryImpl::GeometryImpl(const std::string &name,
+                               const aiMesh *mesh_ai)
+            : GeometryImpl(name) {
+        add(mesh_ai);
+    }
+
+    GeometryImpl::GeometryImpl(const std::string &name,
+                               const std::vector<vec3> &positions,
+                               const std::vector<uint32_t> &indices,
+                               const std::vector<vec3> &normals,
+                               const std::vector<vec2> &texcoords)
+            : GeometryImpl(name) {
+        _CPPGL_ASSERT(normals.size() == 0 || positions.size() == normals.size());
+        _CPPGL_ASSERT(texcoords.size() == 0 || positions.size() == texcoords.size());
+        _CPPGL_ASSERT(indices.size() == 0 || indices.size() >= positions.size());
+
+        if (indices.size() == 0) {
+            std::vector<uint32_t> auto_indices(positions.size());
+            std::iota(auto_indices.begin(), auto_indices.end(), 0);
+            add(positions, auto_indices, normals, texcoords);
+        } else {
+            add(positions, indices, normals, texcoords);
+        }
+    }
+
+    GeometryImpl::GeometryImpl(const std::string &name,
+                               const std::vector<float> &positions,
+                               const std::vector<uint32_t> &indices,
+                               const std::vector<float> &normals,
+                               const std::vector<float> &texcoords)
+            : GeometryImpl(name) {
+        _CPPGL_ASSERT(normals.size() == 0 || positions.size() == normals.size());
+        _CPPGL_ASSERT(texcoords.size() == 0 ||
+                      positions.size() / 3 == texcoords.size() / 2);
+        _CPPGL_ASSERT_EQ(indices.size(),
+                         0 || indices.size() >= positions.size() / 3);
+
+        if (indices.size() == 0) {
+            std::vector<uint32_t> auto_indices(positions.size());
+            std::iota(auto_indices.begin(), auto_indices.end(), 0);
+            add(positions, auto_indices, normals, texcoords);
+        } else {
+            add(positions, indices, normals, texcoords);
+        }
+    }
+
+    GeometryImpl::GeometryImpl(
+            const std::string &name, const float *positions, size_t pos_size,
+            const uint32_t *indices, size_t indices_size, const float *normals,
+            size_t normals_size_, const float *texcoords, size_t texcoords_size_)
+            : GeometryImpl(name) {
+        _CPPGL_ASSERT(normals_size_ == 0 || pos_size == normals_size_);
+        _CPPGL_ASSERT(texcoords_size_ == 0 || pos_size == texcoords_size_);
+        _CPPGL_ASSERT(indices_size == 0 || indices_size >= pos_size);
+
+        if (indices_size == 0) {
+            std::vector<uint32_t> auto_indices(pos_size);
+            std::iota(auto_indices.begin(), auto_indices.end(), 0);
+            add(positions, pos_size, auto_indices.data(), auto_indices.size(), normals,
+                normals_size_, texcoords, texcoords_size_);
+        } else {
+            add(positions, pos_size, indices, indices_size, normals, normals_size_,
+                texcoords, texcoords_size_);
+        }
+    }
+
+    GeometryImpl::~GeometryImpl() {}
+
+    void GeometryImpl::add(const aiMesh *mesh_ai) {
+        // conversion helper
+        const auto to_eigen = [](const aiVector3D &v) { return vec3(v.x, v.y, v.z); };
+        // extract vertices, normals and texture coords
+        positions.reserve(positions.size() + mesh_ai->mNumVertices);
+        normals.reserve(normals.size() +
+                        (mesh_ai->HasNormals() ? mesh_ai->mNumVertices : 0));
+        texcoords.reserve(texcoords.size() +
+                          (mesh_ai->HasTextureCoords(0) ? mesh_ai->mNumVertices : 0));
+        for (uint32_t i = 0; i < mesh_ai->mNumVertices; ++i) {
+            positions.emplace_back(to_eigen(mesh_ai->mVertices[i]));
+            if (mesh_ai->HasNormals())
+                normals.emplace_back(to_eigen(mesh_ai->mNormals[i]));
+            if (mesh_ai->HasTextureCoords(0))
+                texcoords.emplace_back(
+                        cppgl::make_vec2(to_eigen(mesh_ai->mTextureCoords[0][i])));
+            // update AABB
+            bb_min = min(bb_min, to_eigen(mesh_ai->mVertices[i]));
+            bb_max = max(bb_max, to_eigen(mesh_ai->mVertices[i]));
+        }
+        unsigned int index_start_index = this->indices.size();
+        // extract faces
+        indices.reserve(indices.size() + mesh_ai->mNumFaces * 3);
+        for (uint32_t i = 0; i < mesh_ai->mNumFaces; ++i) {
+            const aiFace &face = mesh_ai->mFaces[i];
+            if (face.mNumIndices == 3) {
+                indices.emplace_back(face.mIndices[0]);
+                indices.emplace_back(face.mIndices[1]);
+                indices.emplace_back(face.mIndices[2]);
+            } else
+                std::cerr << "WARN: Geometry: skipping non-triangle face!" << std::endl;
+        }
+
+        if (!mesh_ai->HasNormals() && auto_normals_) {
+            this->normals.reserve(this->normals.size() + positions.size());
+
+            std::vector<uint32_t> new_indices(this->indices.begin() + index_start_index,
+                                              this->indices.end());
+            std::vector<vec3> vertex_normals =
+                    generate_vertex_normals(positions, new_indices);
+
+            this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                                 vertex_normals.end());
+        }
+    }
+
+    void GeometryImpl::add(const GeometryImpl &other) {
+        add(other.positions, other.indices, other.normals, other.texcoords);
+    }
+
+    void GeometryImpl::add(const std::vector<vec3> &positions,
+                           const std::vector<uint32_t> &indices,
+                           const std::vector<vec3> &normals,
+                           const std::vector<vec2> &texcoords) {
+        _CPPGL_ASSERT(normals.size() == 0 || positions.size() == normals.size());
+        _CPPGL_ASSERT(texcoords.size() == 0 || positions.size() == texcoords.size());
+        _CPPGL_ASSERT(indices.size() == 0 || indices.size() >= positions.size());
+
+        // add vertices, normals and texture coords
+        this->positions.reserve(this->positions.size() + positions.size());
+        this->normals.reserve(this->normals.size() + normals.size());
+        this->texcoords.reserve(this->texcoords.size() + texcoords.size());
+        for (uint32_t i = 0; i < positions.size(); ++i) {
+            this->positions.emplace_back(positions[i]);
+            if (i < normals.size())
+                this->normals.emplace_back(normals[i]);
+            if (i < texcoords.size())
+                this->texcoords.emplace_back(texcoords[i]);
+            // update AABB
+            bb_min = min(bb_min, positions[i]);
+            bb_max = max(bb_max, positions[i]);
+        }
+        unsigned int index_start_index = this->indices.size();
+        // add indices
+        this->indices.reserve(this->indices.size() + indices.size());
+        for (uint32_t i = 0; i < indices.size(); ++i)
+            this->indices.emplace_back(indices[i]);
+
+        if (normals.size() == 0 && auto_normals_) {
+            this->normals.reserve(this->normals.size() + positions.size());
+
+            std::vector<uint32_t> new_indices(this->indices.begin() + index_start_index,
+                                              this->indices.end());
+            std::vector<vec3> vertex_normals =
+                    generate_vertex_normals(positions, new_indices);
+
+            this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                                 vertex_normals.end());
+        }
+    }
+
+    void GeometryImpl::add(const std::vector<float> &positions,
+                           const std::vector<uint32_t> &indices,
+                           const std::vector<float> &normals,
+                           const std::vector<float> &texcoords) {
+        _CPPGL_ASSERT(normals.size() == 0 || positions.size() == normals.size());
+        _CPPGL_ASSERT(texcoords.size() == 0 ||
+                      positions.size() / 3 == texcoords.size() / 2);
+        _CPPGL_ASSERT(indices.size() == 0 || indices.size() >= positions.size() / 3);
+
+        // add vertices, normals and texture coords
+        this->positions.reserve(this->positions.size() + (positions.size() / 3));
+        this->normals.reserve(this->normals.size() + (normals.size() / 3));
+        this->texcoords.reserve(this->texcoords.size() + (texcoords.size() / 2));
+
+        const uint32_t start_index = this->positions.size();
+        for (uint32_t i = 0; i < (positions.size() / 3); ++i) {
+            this->positions.emplace_back(
+                    vec3(positions[i * 3 + 0], positions[i * 3 + 1], positions[i * 3 + 2]));
+            if (i < (normals.size() / 3))
+                this->normals.emplace_back(
+                        vec3(normals[i * 3 + 0], normals[i * 3 + 1], normals[i * 3 + 2]));
+            if (i < (texcoords.size() / 2))
+                this->texcoords.emplace_back(
+                        vec2(texcoords[i * 2 + 0], texcoords[i * 2 + 1]));
+            // update AABB
+            bb_min = min(bb_min, this->positions[start_index + i]);
+            bb_max = max(bb_max, this->positions[start_index + i]);
+        }
+        unsigned int index_start_index = this->indices.size();
+        // add indices
+        this->indices.reserve(this->indices.size() + indices.size());
+        for (uint32_t i = 0; i < indices.size(); ++i)
+            this->indices.emplace_back(indices[i]);
+
+        if (normals.size() == 0 && auto_normals_) {
+            this->normals.reserve(this->normals.size() + positions.size() / 3);
+
+            std::vector<uint32_t> new_indices(this->indices.begin() + index_start_index,
+                                              this->indices.end());
+            std::vector<vec3> vertex_normals =
+                    generate_vertex_normals(positions.data(), positions.size() / 3,
+                                            new_indices.data(), new_indices.size());
+
+            this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                                 vertex_normals.end());
+        }
+    }
+
+    void GeometryImpl::set(
+            const float *positions, size_t pos_size, const uint32_t *indices,
+            size_t indices_size, const float *normals, size_t normals_size_,
+            const float *texcoords, size_t texcoords_size_) {
+        _CPPGL_ASSERT(normals_size_ == 0 || pos_size == normals_size_);
+        _CPPGL_ASSERT(texcoords_size_ == 0 || pos_size == texcoords_size_);
+        _CPPGL_ASSERT(indices_size == 0 || indices_size >= pos_size);
+
+        clear_mesh_gpu_memory();
+        clear();
+
+        // add vertices, normals and texture coords
+        this->positions.clear();
+        this->normals.clear();
+        this->texcoords.clear();
+        this->positions.reserve(pos_size);
+        this->normals.reserve((normals_size_));
+        this->texcoords.reserve((texcoords_size_));
+
+        const uint32_t start_index = this->positions.size();
+        for (uint32_t i = 0; i < (pos_size); ++i) {
+            this->positions.emplace_back(
+                    vec3(positions[i * 3 + 0], positions[i * 3 + 1], positions[i * 3 + 2]));
+            if (i < (normals_size_))
+                this->normals.emplace_back(
+                        vec3(normals[i * 3 + 0], normals[i * 3 + 1], normals[i * 3 + 2]));
+            if (i < (texcoords_size_))
+                this->texcoords.emplace_back(
+                        vec2(texcoords[i * 2 + 0], texcoords[i * 2 + 1]));
+            // update AABB
+            bb_min = min(bb_min, this->positions[start_index + i]);
+            bb_max = max(bb_max, this->positions[start_index + i]);
+        }
+        // add indices
+        this->indices.clear();
+        this->indices.reserve(indices_size);
+        for (uint32_t i = 0; i < indices_size; ++i)
+            this->indices.emplace_back(indices[i]);
+
+        if (!indices) {
+            this->indices.resize(pos_size);
+            std::iota(this->indices.begin(), this->indices.end(), 0);
+        }
+
+        if (normals_size_ == 0 && auto_normals_) {
+            this->normals.clear();
+            this->normals.reserve(pos_size);
+
+            std::vector<vec3> vertex_normals = generate_vertex_normals(
+                    positions, pos_size, this->indices.data(), this->indices.size());
+
+            this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                                 vertex_normals.end());
+        }
+    }
+
+
+    void GeometryImpl::set(const std::vector<float> &positions, const std::vector<uint32_t> &indices,
+                           const std::vector<float> &normals, const std::vector<float> &texcoords) {
+        set(positions.data(), static_cast<uint32_t >(positions.size() / 3), indices.data(), indices.size(),
+            normals.data(), static_cast<uint32_t >(normals.size() / 3), texcoords.data(),
+            static_cast<uint32_t >(texcoords.size() / 2));
+    }
+
+    void GeometryImpl::add(
+            const float *positions, size_t pos_size, const uint32_t *indices,
+            size_t indices_size, const float *normals, size_t normals_size_,
+            const float *texcoords, size_t texcoords_size_) {
+        _CPPGL_ASSERT(normals_size_ == 0 || pos_size == normals_size_);
+        _CPPGL_ASSERT(texcoords_size_ == 0 || pos_size == texcoords_size_);
+        _CPPGL_ASSERT(indices_size == 0 || indices_size >= pos_size);
+
+        // add vertices, normals and texture coords
+        this->positions.reserve(this->positions.size() + (pos_size));
+        this->normals.reserve(this->normals.size() + (normals_size_));
+        this->texcoords.reserve(this->texcoords.size() + (texcoords_size_));
+
+        const uint32_t start_index = this->positions.size();
+        for (uint32_t i = 0; i < (pos_size); ++i) {
+            this->positions.emplace_back(
+                    vec3(positions[i * 3 + 0], positions[i * 3 + 1], positions[i * 3 + 2]));
+            if (i < (normals_size_))
+                this->normals.emplace_back(
+                        vec3(normals[i * 3 + 0], normals[i * 3 + 1], normals[i * 3 + 2]));
+            if (i < (texcoords_size_))
+                this->texcoords.emplace_back(
+                        vec2(texcoords[i * 2 + 0], texcoords[i * 2 + 1]));
+            // update AABB
+            bb_min = min(bb_min, this->positions[start_index + i]);
+            bb_max = max(bb_max, this->positions[start_index + i]);
+        }
+
+        // add indices
+        const uint32_t index_start_index = this->indices.size();
+        this->indices.reserve(this->indices.size() + indices_size);
+        if (!indices) {
+            this->indices.resize(this->indices.size() + pos_size);
+            std::iota(this->indices.begin() + index_start_index, this->indices.end(),
+                      index_start_index);
+        } else {
+            for (uint32_t i = 0; i < indices_size; ++i)
+                this->indices.emplace_back(indices[i]);
+        }
+
+        if (normals_size_ == 0 && auto_normals_) {
+            this->normals.reserve(this->normals.size() + pos_size);
+            std::vector<vec3> face_normals;
+
+            std::vector<uint32_t> new_indices(this->indices.begin() + index_start_index,
+                                              this->indices.end());
+            std::vector<vec3> vertex_normals = generate_vertex_normals(
+                    positions, pos_size, new_indices.data(), new_indices.size());
+
+            this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                                 vertex_normals.end());
+        }
+    }
+
+    void GeometryImpl::auto_generate_normals(
+            const mat4 &initial_transform) {
+        _CPPGL_ASSERT_EQ(normals.size(), 0);
+        auto_normals_ = true;
+
+        std::vector<vec3> vertex_normals =
+                generate_vertex_normals(positions, indices);
+        for (unsigned int i = 0; i < vertex_normals.size(); i++) {
+            vertex_normals[i] =
+                    (initial_transform.block<3, 3>(0, 0) * vertex_normals[i]).normalized();
+        }
+
+        this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                             vertex_normals.end());
+    }
+
+    void GeometryImpl::convert_normals_perface2vertex() {
+        _CPPGL_ASSERT_EQ(normals.size(), positions.size());
+        this->normals.clear();
+        auto_generate_normals();
+        // auto_normals_ = true;
+
+        // std::vector<vec3> updated_normals;
+        // for (unsigned int i = 0; i < normals.size(); i = i + 3) {
+        //   // updated_normals.push_back(normals[indices[i]]);
+        //   updated_normals.push_back(normals[indices[i]]);
+        // }
+
+        // std::vector<vec3> vertex_normals =
+        //     face2vertex_normals(updated_normals, positions.size(), indices);
+
+        // this->normals.clear();
+        // this->normals.insert(this->normals.end(), vertex_normals.begin(),
+        //                      vertex_normals.end());
+    }
+
+    void GeometryImpl::clear() {
+        bb_min =
+                vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max());
+        bb_max =
+                vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(),
+                     std::numeric_limits<float>::min());
+        if (positions.size()) {
+            positions.clear();
+        }
+        if (indices.size()) {
+            indices.clear();
+        }
+        if (normals.size()) {
+            normals.clear();
+        }
+        if (texcoords.size()) {
+            texcoords.clear();
+        }
+    }
+
+    void GeometryImpl::recompute_aabb() {
+        bb_min =
+                vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max());
+        bb_max =
+                vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(),
+                     std::numeric_limits<float>::min());
+
+        for (const auto &pos: positions) {
+            bb_min = min(bb_min, pos);
+            bb_max = max(bb_max, pos);
+        }
+    }
+
+    void GeometryImpl::fit_into_aabb(const vec3 &aabb_min,
+                                     const vec3 &aabb_max) {
+        // compute offset to origin and scale factor
+        const vec3 center = (bb_min + bb_max) * .5f;
+        const vec3 scale_v = (aabb_max - aabb_min) / (bb_max - bb_min);
+        const float scale_f =
+                std::min(scale_v.x(), std::min(scale_v.y(), scale_v.z()));
+        // apply
+        for (uint32_t i = 0; i < positions.size(); ++i)
+            positions[i] = (positions[i] - center) * scale_f;
+    }
+
+    void GeometryImpl::translate(const vec3 &by) {
+        for (uint32_t i = 0; i < positions.size(); ++i)
+            positions[i] += by;
+    }
+
+    void GeometryImpl::scale(const vec3 &by) {
+        const mat4 s = cppgl::scale(mat4::Identity(), by);
+        const mat4 s_inv = cppgl::inverse(s);
+        const mat4 mat_norm = cppgl::transpose(s_inv);
+
+        // scale positions
+        for (uint32_t i = 0; i < positions.size(); ++i)
+            positions[i] = positions[i].cwiseProduct(by);
+        // scale normals
+        for (uint32_t i = 0; i < normals.size(); ++i)
+            normals[i] = cppgl::normalize(
+                    cppgl::make_vec3(mat_norm * cppgl::make_vec4(normals[i], 0)));
+    }
+
+    void GeometryImpl::rotate(float angle_degrees,
+                              const vec3 &axis) {
+        const mat4 rot = cppgl::rotate(cppgl::radians(angle_degrees), axis);
+        const mat4 rot_inv_tra = cppgl::transpose(cppgl::inverse(rot));
+
+        // rotate positions
+        for (uint32_t i = 0; i < positions.size(); ++i)
+            positions[i] = cppgl::make_vec3(rot * cppgl::make_vec4(positions[i], 1));
+        // rotate normals
+        for (uint32_t i = 0; i < normals.size(); ++i)
+            normals[i] = cppgl::normalize(
+                    cppgl::make_vec3(rot_inv_tra * cppgl::make_vec4(normals[i], 0)));
+    }
+
+    void GeometryImpl::transform(const mat4 &trans) {
+        mat3 rot_inv_tra = trans.block<3, 3>(0, 0).inverse().transpose();
+        // rotate positions
+        for (uint32_t i = 0; i < positions.size(); ++i)
+            positions[i] =
+                    cppgl::make_vec3(trans * cppgl::make_vec4(positions[i], 1));
+        // rotate normals
+        for (uint32_t i = 0; i < normals.size(); ++i)
+            normals[i] = (rot_inv_tra * normals[i]).normalized();
+    }
+
+// -------------------------------------------------------------------
+// GeometryWrapperImpl
+// -------------------------------------------------------------------
+
+    GeometryWrapperImpl::GeometryWrapperImpl(
+            const std::string &name)
+            : GeometryBaseImpl(name) {}
+
+    GeometryWrapperImpl::GeometryWrapperImpl(
+            const std::string &name, float *positions, size_t pos_size,
+            uint32_t *indices, size_t indices_size, float *normals,
+            size_t normals_size_, float *texcoords, size_t texcoords_size_)
+            : GeometryWrapperImpl(name) {
+        _CPPGL_ASSERT(normals_size_ == 0 || pos_size == normals_size_);
+        _CPPGL_ASSERT(texcoords_size_ == 0 || pos_size == texcoords_size_);
+        _CPPGL_ASSERT(indices_size == 0 || indices_size >= pos_size);
+
+        set(positions, pos_size, indices, indices_size, normals, normals_size_,
+            texcoords, texcoords_size_);
+    }
+
+    GeometryWrapperImpl::~GeometryWrapperImpl() {}
+
+    void GeometryWrapperImpl::set(
+            float *positions, size_t pos_size, uint32_t *indices, size_t indices_size,
+            float *normals, size_t normals_size_, float *texcoords,
+            size_t texcoords_size_) {
+        _CPPGL_ASSERT(normals_size_ == 0 || pos_size == normals_size_);
+        _CPPGL_ASSERT(texcoords_size_ == 0 || pos_size == texcoords_size_);
+        _CPPGL_ASSERT(indices_size == 0 || indices_size >= pos_size);
+
+        // clear_mesh_gpu_memory();
+        clear();
+
+        for (uint32_t i = 0; i < pos_size; ++i) {
+            // update AABB
+            bb_min = min(bb_min, vec3(positions[i * 3 + 0], positions[i * 3 + 1],
+                                      positions[i * 3 + 2]));
+            bb_max = max(bb_max, vec3(positions[i * 3 + 0], positions[i * 3 + 1],
+                                      positions[i * 3 + 2]));
+        }
+
+        this->positions_ptr_ = positions;
+        this->indices_ptr_ = indices;
+        this->normals_ptr_ = normals;
+        this->texcoords_ptr_ = texcoords;
+
+        this->positions_size_ = pos_size;
+        this->indices_size_ = indices_size;
+        this->normals_size_ = normals_size_;
+        this->texcoords_size_ = texcoords_size_;
+
+        if (!indices) {
+            this->indices.resize(pos_size);
+            std::iota(this->indices.begin(), this->indices.end(), 0);
+            this->indices_ptr_ = this->indices.data();
+            this->indices_size_ = this->indices.size();
+        }
+
+        if (normals_size_ == 0 && auto_normals_) {
+            this->normals.reserve(this->normals.size() + pos_size);
+
+            std::vector<vec3> vertex_normals = generate_vertex_normals(
+                    positions_ptr_, positions_size_, indices_ptr_, indices_size_);
+
+            this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                                 vertex_normals.end());
+
+            this->normals_ptr_ = this->normals[0].data();
+            this->normals_size_ = this->normals.size();
+        }
+    }
+
+    void GeometryWrapperImpl::auto_generate_normals(
+            const mat4 &initial_transform) {
+        _CPPGL_ASSERT_EQ(normals.size(), 0);
+        auto_normals_ = true;
+
+        this->normals.reserve(this->normals.size() + this->positions_size_);
+
+        std::vector<vec3> vertex_normals = generate_vertex_normals(
+                positions_ptr_, positions_size_, indices_ptr_, indices_size_);
+        for (unsigned int i = 0; i < vertex_normals.size(); i++) {
+            vertex_normals[i] =
+                    (initial_transform.block<3, 3>(0, 0) * vertex_normals[i]).normalized();
+        }
+
+        this->normals.insert(this->normals.end(), vertex_normals.begin(),
+                             vertex_normals.end());
+
+        this->normals_ptr_ = this->normals[0].data();
+        this->normals_size_ = this->normals.size();
+    }
+
+    void GeometryWrapperImpl::convert_normals_perface2vertex() {
+        _CPPGL_ASSERT_EQ(normals_size_, positions_size_);
+        this->normals_ptr_ = nullptr;
+        this->normals.clear();
+        this->normals_size_ = 0;
+        auto_generate_normals();
+        // auto_normals_ = true;
+
+        // std::vector<vec3> updated_normals;
+        // for (unsigned int i = 0; i < normals.size(); i = i + 3) {
+        //   updated_normals.push_back(get_normal(get_index(i)));
+        // }
+
+        // std::vector<vec3> vertex_normals =
+        //     face2vertex_normals(updated_normals[0].data(), updated_normals.size(),
+        //                         positions_size_, indices_ptr_, indices_size_);
+
+        // this->normals.clear();
+        // this->normals.reserve(this->normals.size() + this->positions_size_);
+        // this->normals.insert(this->normals.end(), vertex_normals.begin(),
+        //                      vertex_normals.end());
+
+        // this->normals_ptr_ = this->normals[0].data();
+        // this->normals_size_ = this->normals.size();
+    }
+
+    void GeometryWrapperImpl::clear() {
+        bb_min.x() = std::numeric_limits<float>::max();
+        bb_min.y() = std::numeric_limits<float>::max();
+        bb_min.z() = std::numeric_limits<float>::max();
+
+        bb_max.x() = std::numeric_limits<float>::min();
+        bb_max.y() = std::numeric_limits<float>::min();
+        bb_max.z() = std::numeric_limits<float>::min();
+
+        if (indices.size()) {
+            indices.clear();
+        }
+        if (normals.size()) {
+            normals.clear();
+        }
+
+        positions_size_ = 0;
+        indices_size_ = 0;
+        normals_size_ = 0;
+        texcoords_size_ = 0;
+
+        positions_ptr_ = nullptr;
+        indices_ptr_ = nullptr;
+        normals_ptr_ = nullptr;
+        texcoords_ptr_ = nullptr;
+    }
+
+    void GeometryWrapperImpl::recompute_aabb() {
+        bb_min =
+                vec3(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max());
+        bb_max =
+                vec3(std::numeric_limits<float>::min(), std::numeric_limits<float>::min(),
+                     std::numeric_limits<float>::min());
+
+        for (unsigned int i = 0; i < positions_size_; i++) {
+            bb_min =
+                    min(bb_min, vec3(positions_ptr_[i * 3 + 0], positions_ptr_[i * 3 + 1],
+                                     positions_ptr_[i * 3 + 2]));
+            bb_max =
+                    max(bb_max, vec3(positions_ptr_[i * 3 + 0], positions_ptr_[i * 3 + 1],
+                                     positions_ptr_[i * 3 + 2]));
+        }
+    }
+
+    void GeometryWrapperImpl::fit_into_aabb(const vec3 &aabb_min,
+                                            const vec3 &aabb_max) {
+        // compute offset to origin and scale factor
+        const vec3 center = (bb_min + bb_max) * .5f;
+        const vec3 scale_v = (aabb_max - aabb_min) / (bb_max - bb_min);
+        const float scale_f =
+                std::min(scale_v.x(), std::min(scale_v.y(), scale_v.z()));
+        // apply
+
+        for (uint32_t i = 0; i < positions_size_; ++i) {
+            positions_ptr_[i * 3 + 0] =
+                    (positions_ptr_[i * 3 + 0] - center.x()) * scale_f;
+            positions_ptr_[i * 3 + 1] =
+                    (positions_ptr_[i * 3 + 1] - center.y()) * scale_f;
+            positions_ptr_[i * 3 + 2] =
+                    (positions_ptr_[i * 3 + 2] - center.z()) * scale_f;
+        }
+    }
+
+    void GeometryWrapperImpl::translate(const vec3 &by) {
+        for (uint32_t i = 0; i < positions_size_; ++i) {
+            positions_ptr_[i * 3 + 0] = (positions_ptr_[i * 3 + 0] + by.x());
+            positions_ptr_[i * 3 + 1] = (positions_ptr_[i * 3 + 1] + by.y());
+            positions_ptr_[i * 3 + 2] = (positions_ptr_[i * 3 + 2] + by.z());
+        }
+    }
+
+    void GeometryWrapperImpl::scale(const vec3 &by) {
+        const mat4 s = cppgl::scale(mat4::Identity(), by);
+        const mat4 s_inv = cppgl::inverse(s);
+        const mat4 mat_norm = cppgl::transpose(s_inv);
+
+        for (uint32_t i = 0; i < positions_size_; ++i) {
+            positions_ptr_[i * 3 + 0] = (positions_ptr_[i * 3 + 0] * by.x());
+            positions_ptr_[i * 3 + 1] = (positions_ptr_[i * 3 + 1] * by.y());
+            positions_ptr_[i * 3 + 2] = (positions_ptr_[i * 3 + 2] * by.z());
+        }
+
+        for (uint32_t i = 0; i < normals_size_; ++i) {
+            normals_ptr_[i * 3 + 0] = (mat_norm(0, 0) * normals_ptr_[i * 3 + 0] +
+                                       mat_norm(0, 1) * normals_ptr_[i * 3 + 1] +
+                                       mat_norm(0, 2) * normals_ptr_[i * 3 + 2]);
+            normals_ptr_[i * 3 + 1] = (mat_norm(1, 0) * normals_ptr_[i * 3 + 0] +
+                                       mat_norm(1, 1) * normals_ptr_[i * 3 + 1] +
+                                       mat_norm(1, 2) * normals_ptr_[i * 3 + 2]);
+            normals_ptr_[i * 3 + 2] = (mat_norm(2, 0) * normals_ptr_[i * 3 + 0] +
+                                       mat_norm(2, 1) * normals_ptr_[i * 3 + 1] +
+                                       mat_norm(2, 2) * normals_ptr_[i * 3 + 2]);
+
+            float norm =
+                    sqrt(pow(normals_ptr_[i * 3 + 0], 2) + pow(normals_ptr_[i * 3 + 1], 2) +
+                         pow(normals_ptr_[i * 3 + 2], 2));
+
+            normals_ptr_[i * 3 + 0] /= norm;
+            normals_ptr_[i * 3 + 1] /= norm;
+            normals_ptr_[i * 3 + 2] /= norm;
+        }
+    }
+
+    void GeometryWrapperImpl::rotate(float angle_degrees,
+                                     const vec3 &axis) {
+        const mat4 rot = cppgl::rotate(cppgl::radians(angle_degrees), axis);
+        const mat4 rot_inv_tra = cppgl::transpose(cppgl::inverse(rot));
+
+        for (uint32_t i = 0; i < positions_size_; ++i) {
+            vec3 pos_copy = cppgl::make_vec3(&(positions_ptr_[i * 3 + 0]));
+            Eigen::Map<vec3> pos(&(positions_ptr_[i * 3 + 0]));
+            pos = (rot * pos_copy.homogeneous()).head<3>();
+        }
+
+        for (uint32_t i = 0; i < normals_size_; ++i) {
+            vec3 norm_copy = cppgl::make_vec3(&(normals_ptr_[i * 3 + 0]));
+            Eigen::Map<vec3> norm(&(normals_ptr_[i * 3 + 0]));
+            norm = (rot_inv_tra * norm_copy.homogeneous()).head<3>();
+            norm.normalize();
+        }
+    }
+
+    void GeometryWrapperImpl::transform(const mat4 &trans) {
+        mat3 rot_inv_tra = trans.block<3, 3>(0, 0).inverse().transpose();
+
+        for (uint32_t i = 0; i < positions_size_; ++i) {
+            vec3 pos_copy = cppgl::make_vec3(&(positions_ptr_[i * 3 + 0]));
+            Eigen::Map<vec3> pos(&(positions_ptr_[i * 3 + 0]));
+            pos = (trans * pos_copy.homogeneous()).head<3>();
+        }
+
+        for (uint32_t i = 0; i < normals_size_; ++i) {
+            vec3 norm_copy = cppgl::make_vec3(&(normals_ptr_[i * 3 + 0]));
+            Eigen::Map<vec3> norm(&(normals_ptr_[i * 3 + 0]));
+            norm = rot_inv_tra * norm_copy;
+            norm.normalize();
+        }
+    }
 CPPGL_NAMESPACE_END

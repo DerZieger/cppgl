@@ -6,7 +6,7 @@ PROJECT(CppGL
     LANGUAGES CXX
 )
 
-if (NOT UNIX AND NOT WIN32)
+if (NOT UNIX )
 	message(FATAL_ERROR "Unsupported platform!")
 endif()
 
@@ -27,28 +27,72 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 
 set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
+# ---------------------------------------------------------------------
+# fetch content
+
+include(FetchContent)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/libs CACHE PATH "Missing description." FORCE)
+
+
+FetchContent_Declare(assimp
+        GIT_REPOSITORY https://github.com/assimp/assimp.git
+        GIT_TAG master)
+#set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+#set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
+#set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(assimp)
+#target_include_directories(3d_renderer PRIVATE libs/assimp-src/include)
+#target_link_libraries(3d_renderer assimp)
+
+FetchContent_Declare(
+        Eigen
+        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE)
+set(EIGEN_BUILD_DOC OFF)
+# note: To disable eigen tests,
+# you should put this code in a add_subdirectory to avoid to change
+# BUILD_TESTING for your own project too since variables are directory
+# scoped
+#set(BUILD_TESTING OFF)
+set(EIGEN_BUILD_PKGCONFIG OFF)
+
+FetchContent_MakeAvailable(Eigen)
+
+#target_link_libraries(YourTarget PRIVATE Eigen3::Eigen)
+
+
+
+FetchContent_Declare(
+        glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw
+)
+
+FetchContent_GetProperties(glfw)
+if(NOT glfw_POPULATED)
+    FetchContent_Populate(glfw)
+
+    set(GLFW_BUILD_EXAMPLES OFF CACHE INTERNAL "Build the GLFW example programs")
+    set(GLFW_BUILD_TESTS OFF CACHE INTERNAL "Build the GLFW test programs")
+    set(GLFW_BUILD_DOCS OFF CACHE INTERNAL "Build the GLFW documentation")
+    set(GLFW_INSTALL OFF CACHE INTERNAL "Generate installation target")
+    set(GLFW_BUILD_INSTALL OFF CACHE BOOL " " FORCE)
+    set(GLFW_USE_CHDIR OFF CACHE BOOL " " FORCE)
+    add_subdirectory(${glfw_SOURCE_DIR} ${glfw_BINARY_DIR})
+endif()
+FetchContent_MakeAvailable(glfw)
+#target_link_libraries(game glfw )
+
+FetchContent_Declare(glew
+        GIT_REPOSITORY https://github.com/Perlmint/glew-cmake.git
+        GIT_TAG master)
 set(glew-cmake_BUILD_STATIC OFF CACHE BOOL "" FORCE)
 set(glew-cmake_BUILD_SHARED ON CACHE BOOL "" FORCE)
-add_subdirectory(subtrees/glew)
+FetchContent_MakeAvailable(glew)
 
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL " " FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL " " FORCE)
-set(GLFW_BUILD_DOCS OFF CACHE BOOL " " FORCE)
-set(GLFW_BUILD_INSTALL OFF CACHE BOOL " " FORCE)
-set(GLFW_INSTALL OFF CACHE BOOL " " FORCE)
-set(GLFW_USE_CHDIR OFF CACHE BOOL " " FORCE)
-add_subdirectory(subtrees/glfw)
-
-# assimp
-find_package(assimp QUIET)
-if (NOT assimp_FOUND)
-    message(STATUS "ASSIMP NOT FOUND: compiling from source")
-    set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
-    set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    add_subdirectory(subtrees/assimp)
-else()
-    message(STATUS "ASSIMP FOUND: ${assimp_DIR}")
-endif()
 
 # ---------------------------------------------------------------------
 # compiler options
@@ -61,13 +105,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
 set(CMAKE_LINK_DIRECTORIES_BEFORE ON)
 
-if(UNIX)
-    add_compile_options(-pthread -march=native)
-else()
-    add_definitions(-D_USE_MATH_DEFINES)
-    add_definitions(-DNOMINMAX)
-    add_definitions(-D_SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING) # wtf
-endif()
+
+set(CMAKE_CXX_FLAGS_RELEASE  "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wno-unused-parameter -Wno-unused-variable -Wno-int-to-pointer-cast -march=native -funroll-loops -finline-functions")
+set(CMAKE_CXX_FLAGS_DEBUG  "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
+
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-deprecated-declarations -pthread")
+
+# linker flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
 
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 include(GenerateExportHeader)

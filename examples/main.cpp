@@ -1,6 +1,4 @@
 #include <cppgl.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <fstream>
 
@@ -49,10 +47,10 @@ int main(int argc, char** argv) {
     Context::init(params);
 
     // setup fbo
-    const glm::ivec2 res = Context::resolution();
-    Framebuffer fbo = Framebuffer("example_fbo", res.x, res.y);
-    fbo->attach_depthbuffer(Texture2D("example_fbo/depth", res.x, res.y, GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT));
-    fbo->attach_colorbuffer(Texture2D("example_fbo/col", res.x, res.y, GL_RGBA32F, GL_RGBA, GL_FLOAT));
+    const ivec2 res = Context::resolution();
+    Framebuffer fbo = Framebuffer("example_fbo", res.x(), res.y());
+    fbo->attach_depthbuffer(Texture2D("example_fbo/depth", res.x(), res.y(), GL_DEPTH_COMPONENT, GL_DEPTH_COMPONENT, GL_FLOAT));
+    fbo->attach_colorbuffer(Texture2D("example_fbo/col", res.x(), res.y(), GL_RGBA32F, GL_RGBA, GL_FLOAT));
     fbo->check();
 
     // setup draw shader
@@ -61,12 +59,12 @@ int main(int argc, char** argv) {
 
     // setup compute shader
     Shader computeShaderExample = Shader("computeShaderExample", "shader/computeShaderExample.glcs");
-    Texture2D computeShaderOutputTex("computeExampleOutputTex", Context::resolution().x, Context::resolution().y, GL_RGBA32F, GL_RGBA, GL_FLOAT);
+    Texture2D computeShaderOutputTex("computeExampleOutputTex", Context::resolution().x(), Context::resolution().y(), GL_RGBA32F, GL_RGBA, GL_FLOAT);
 
     // install callbacks
-    Context::set_resize_callback(resize_callback);
-    Context::set_keyboard_callback(keyboard_callback);
-    Context::set_mouse_button_callback(mouse_button_callback);
+    //Context::set_resize_callback(resize_callback);
+    //Context::set_keyboard_callback(keyboard_callback);
+    //Context::set_mouse_button_callback(mouse_button_callback);
     static bool doGreyscaleComputeShaderExample = false;
     gui_add_callback("example_gui_callback", [] { ImGui::ShowMetricsWindow(); ImGui::Checkbox("compute shader example: convert to greyscale", &doGreyscaleComputeShaderExample); });
 
@@ -74,17 +72,17 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "-w")
-            Context::resize(std::stoi(argv[++i]), Context::resolution().y);
+            Context::resize(std::stoi(argv[++i]), Context::resolution().y());
         else if (arg == "-h")
-            Context::resize(Context::resolution().x, std::stoi(argv[++i]));
+            Context::resize(Context::resolution().x(), std::stoi(argv[++i]));
         else if (arg == "-pos") {
-            current_camera()->pos.x = std::stof(argv[++i]);
-            current_camera()->pos.y = std::stof(argv[++i]);
-            current_camera()->pos.z = std::stof(argv[++i]);
+            current_camera()->pos.x() = std::stof(argv[++i]);
+            current_camera()->pos.y() = std::stof(argv[++i]);
+            current_camera()->pos.z() = std::stof(argv[++i]);
         } else if (arg == "-dir") {
-            current_camera()->dir.x = std::stof(argv[++i]);
-            current_camera()->dir.y = std::stof(argv[++i]);
-            current_camera()->dir.z = std::stof(argv[++i]);
+            current_camera()->dir.x() = std::stof(argv[++i]);
+            current_camera()->dir.y() = std::stof(argv[++i]);
+            current_camera()->dir.z() = std::stof(argv[++i]);
         } else if (arg == "-fov")
             current_camera()->fov_degree = std::stof(argv[++i]);
         else {
@@ -129,7 +127,7 @@ int main(int argc, char** argv) {
             fbo->color_textures[0]->bind(0);
 
             // dispatches the task to the gpu
-            computeShaderExample->dispatch_compute(Context::resolution().x, Context::resolution().y, 1);
+            computeShaderExample->dispatch_compute(Context::resolution().x(), Context::resolution().y(), 1);
 
             fbo->color_textures[0]->unbind();
             computeShaderOutputTex->unbind_image(0);

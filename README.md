@@ -1,18 +1,15 @@
 CppGL Framework
 =======
 
-OpenGL framework for use in teaching and research with focus on simplicity and reusability.
+OpenGL framework for use in teaching and research with focus on simplicity and reusability.  
+This fork was changed to use eigen instead of glm and offer additional features.  
+For the eigen support and some of the features code from [Saiga](https://github.com/darglein/saiga) was adapted.
 
 ## Dependencies
 
 ### Ubuntu (22.04)
 
     apt-get install -y build-essential libx11-dev xorg-dev libopengl-dev freeglut3-dev cmake
-    apt-get install -y libassimp-dev # optional, to reduce compile times
-
-### Windows
-
-    Visual Studio 2019 or newer with cmake support
 
 ## Build
 
