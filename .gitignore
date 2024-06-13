@@ -138,6 +138,14 @@ imgui.ini
 
 # Visual Studio cache folder
 .vs/*
-
-# Visual Studio cmake and compile 
+.vscode
+# Visual Studio cmake and compile
 out/*
+
+
+build
+libs
+examples/example
+cmake-build-debug
+cmake-build-release
+cmake-build-relwithdebinfo
