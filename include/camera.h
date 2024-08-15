@@ -19,34 +19,30 @@ CPPGL_NAMESPACE_BEGIN
 
         virtual ~CameraImpl();
 
-        void update();
+        virtual void update();
 
         // move
-        void forward(float by);
+        virtual void forward(float by);
 
-        void backward(float by);
+        virtual void backward(float by);
 
-        void leftward(float by);
+        virtual void leftward(float by);
 
-        void rightward(float by);
+        virtual void rightward(float by);
 
-        void upward(float by);
+        virtual void upward(float by);
 
-        void downward(float by);
+        virtual void downward(float by);
 
         // rotate
-        void yaw(float angle);
+        virtual void yaw(float angle);
 
-        void pitch(float angle);
+        virtual void pitch(float angle);
 
-        void roll(float angle);
+        virtual void roll(float angle);
 
         // load/store
-        void store(vec3 &pos, quat &rot) const;
-
-        void load(const vec3 &pos, const quat &rot);
-
-        void from_lookat(const vec3 &pos, const vec3 &lookat, const vec3 &up = vec3(0, 1, 0));
+        virtual void from_lookat(const vec3 &pos, const vec3 &lookat, const vec3 &up = vec3(0, 1, 0));
 
         // compute aspect ratio from current viewport
         static float aspect_ratio();
