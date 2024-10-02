@@ -9,7 +9,7 @@ For the eigen support and some of the features code from [Saiga](https://github.
 
 ### Ubuntu (22.04)
 
-    apt-get install -y build-essential libx11-dev xorg-dev libopengl-dev freeglut3-dev cmake
+    apt-get install -y build-essential libx11-dev xorg-dev libopengl-dev freeglut3-dev cmake libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
 
 ## Build
 
