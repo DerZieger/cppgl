@@ -37,7 +37,8 @@ set(FETCHCONTENT_BASE_DIR ${PROJECT_SOURCE_DIR}/libs CACHE PATH "Missing descrip
 
 FetchContent_Declare(assimp
         GIT_REPOSITORY https://github.com/assimp/assimp.git
-        GIT_TAG master)
+        GIT_TAG 17399d198f6411dfcd25a4adb4c3a40733f0a717
+)
 #set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 #set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
@@ -49,7 +50,7 @@ FetchContent_MakeAvailable(assimp)
 FetchContent_Declare(
         Eigen
         GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        GIT_TAG master
+        GIT_TAG 2a3465102ac48d5e71b134d77b25665d63120eff
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 set(EIGEN_BUILD_DOC OFF)
@@ -69,6 +70,7 @@ FetchContent_MakeAvailable(Eigen)
 FetchContent_Declare(
         glfw
         GIT_REPOSITORY https://github.com/glfw/glfw
+	GIT_TAG b35641f4a3c62aa86a0b3c983d163bc0fe36026d
 )
 
 FetchContent_GetProperties(glfw)
@@ -88,7 +90,7 @@ FetchContent_MakeAvailable(glfw)
 
 FetchContent_Declare(glew
         GIT_REPOSITORY https://github.com/Perlmint/glew-cmake.git
-        GIT_TAG master)
+        GIT_TAG 72ff6b1a5ecfc1ae6154637298882744487634b4)
 set(glew-cmake_BUILD_STATIC OFF CACHE BOOL "" FORCE)
 set(glew-cmake_BUILD_SHARED ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glew)
