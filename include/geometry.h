@@ -7,6 +7,7 @@
 #include "data_types.h"
 #include "math/eigen_glm_interface.h"
 #include "cassert.h"
+#include <numeric>
 
 CPPGL_NAMESPACE_BEGIN
 
