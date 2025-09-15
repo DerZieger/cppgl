@@ -50,7 +50,7 @@ FetchContent_MakeAvailable(assimp)
 FetchContent_Declare(
         Eigen
         GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
-        GIT_TAG 2a3465102ac48d5e71b134d77b25665d63120eff
+        GIT_TAG "origin/3.4"
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 set(EIGEN_BUILD_DOC OFF)
